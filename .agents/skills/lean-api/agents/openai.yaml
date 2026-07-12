@@ -1,0 +1,4 @@
+interface:
+  display_name: "API全链路学习"
+  short_description: "梳理指定功能的API全链路并沉淀到APIDocs文档中"
+  default_prompt: "使用 $lean-api 处理 /leanApi [模块名] [功能名称]，输出 APIDocs 下的全链路学习文档。"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "项目内学习"
+  short_description: "把项目知识学习沉淀为文档"
+  default_prompt: "使用 $project-learn 通过 /learn 知识名 生成 docs/learn 下的项目学习文档。"
