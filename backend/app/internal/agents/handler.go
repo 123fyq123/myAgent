@@ -157,6 +157,7 @@ func (h *Handler) AgentMessage(c *gin.Context) {
 				cancel()
 				return
 			}
+			// 强制让服务器把当前内存缓冲区里攒着的数据，立刻、马上通过网络冲刷给前端浏览器，而不是留在后端干等。
 			c.Writer.Flush()
 		case err, ok := <-errchan:
 			if !ok {
@@ -180,25 +181,37 @@ func (h *Handler) AgentMessage(c *gin.Context) {
 
 }
 
+// 更新agent的tools
 func (h *Handler) UpdateAgentTool(c *gin.Context) {
+	// 1. 从 URL 路径参数中提取智能体的 ID (比如请求路径是 /agents/:id/tools)
 	var id uuid.UUID
 	if err := req.Path(c, "id", &id); err != nil {
-		return
+		return // 如果提取失败（例如格式不是合法的 UUID），封装的 req.Path 内部通常已经返回了 400 错误，这里直接退出
 	}
+
+	// 2. 从 HTTP 请求体（Body）中解析出前端传过来的 JSON 数据
 	var updateReq UpdateAgentToolReq
 	if err := req.JsonParam(c, &updateReq); err != nil {
-		return
+		return // 如果 JSON 格式错误或缺少必要参数，直接拦截并退出
 	}
+
+	// 3. 从 Gin 的上下文 c 中获取当前处于登录状态的用户 ID
 	userID, ok := req.GetUserIdUUID(c)
 	if !ok {
-		return
+		return // 如果没获取到，说明用户未登录或 Token 失效，直接拦截
 	}
+
+	// 4. 核心：将校验完的数据打包，向下传递给 Service（业务逻辑）层执行
+	//    传入 Context、当前操作人ID、要修改的智能体ID、以及具体要更新的工具列表数据
 	resp, err := h.service.updateAgentTool(c.Request.Context(), userID, id, updateReq)
+
+	// 5. 统一的响应处理
 	if err != nil {
-		res.Error(c, err)
+		res.Error(c, err) // 如果业务层报错（比如：智能体不存在、用户越权修改别人的智能体、或者数据库挂了），返回对应的错误 JSON
 		return
 	}
-	res.Success(c, resp)
+
+	res.Success(c, resp) // 如果一切顺利，使用包装好的标准成功格式（通常是 {"code": 200, "data": ...}）回给前端
 }
 
 func (h *Handler) AddAgentKnowledgeBase(c *gin.Context) {
