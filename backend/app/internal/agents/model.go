@@ -13,10 +13,12 @@ type models struct {
 	db *gorm.DB
 }
 
+// 删除 Agent 与知识库的关联
 func (m *models) deleteAgentKnowledgeBase(ctx context.Context, agentId uuid.UUID, kbId uuid.UUID) error {
 	return m.db.WithContext(ctx).Where("agent_id = ? and knowledge_base_id = ?", agentId, kbId).Delete(&model.AgentKnowledgeBase{}).Error
 }
 
+// 用来判断某个 Agent​ 是否已经关联了指定的 知识库
 func (m *models) isAgentKnowledgeBaseExist(ctx context.Context, agentId uuid.UUID, knowledgeBaseID uuid.UUID) (bool, error) {
 	var count int64
 	err := m.db.WithContext(ctx).Model(&model.AgentKnowledgeBase{}).Where("agent_id = ? and knowledge_base_id = ?", agentId, knowledgeBaseID).Count(&count).Error
@@ -26,24 +28,30 @@ func (m *models) isAgentKnowledgeBaseExist(ctx context.Context, agentId uuid.UUI
 	return count > 0, nil
 }
 
+// 创建 Agent 和 KnowledgeBase 关联
 func (m *models) createAgentKnowledgeBase(ctx context.Context, ab *model.AgentKnowledgeBase) error {
 	return m.db.WithContext(ctx).Create(ab).Error
 }
 
+// 删除 Agent 的所有 Tool
 func (m *models) deleteAgentTools(ctx context.Context, agentId uuid.UUID) error {
 	return m.db.WithContext(ctx).Where("agent_id = ?", agentId).Delete(&model.AgentTool{}).Error
 }
 
+// 批量创建 Agent Tool
 func (m *models) createAgentTools(ctx context.Context, tools []*model.AgentTool) error {
 	return m.db.WithContext(ctx).CreateInBatches(tools, len(tools)).Error
 }
 
+// 更新 Agent
 func (m *models) updateAgent(ctx context.Context, agent *model.Agent) error {
 	return m.db.WithContext(ctx).Updates(agent).Error
 }
 
 func (m *models) getAgent(ctx context.Context, userID uuid.UUID, id uuid.UUID) (*model.Agent, error) {
 	var agent model.Agent
+	// 预加载就是在查询主数据时，一次性把关联的数据也查出来，而不是用到的时候再去查数据库。
+	// 预加载的作用是把 Agent 关联的 KnowledgeBase 查出来，塞进 Agent 里
 	err := m.db.WithContext(ctx).
 		Preload("Tools").
 		Preload("KnowledgeBases").
@@ -54,6 +62,7 @@ func (m *models) getAgent(ctx context.Context, userID uuid.UUID, id uuid.UUID) (
 	return &agent, err
 }
 
+// 支持按名称（模糊）、状态过滤，并做分页
 func (m *models) listAgents(ctx context.Context, userID uuid.UUID, filter AgentFilter) ([]*model.Agent, int64, error) {
 	var agents []*model.Agent
 	var count int64

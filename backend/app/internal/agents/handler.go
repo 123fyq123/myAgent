@@ -16,6 +16,7 @@ type Handler struct {
 	service *service
 }
 
+// 创建 Agent
 func (h *Handler) CreateAgent(c *gin.Context) {
 	var createReq CreateAgentReq
 	if err := req.JsonParam(c, &createReq); err != nil {
@@ -35,6 +36,7 @@ func (h *Handler) CreateAgent(c *gin.Context) {
 	res.Success(c, resp)
 }
 
+// 查询 Agent 列表
 func (h *Handler) ListAgents(c *gin.Context) {
 	var listReq SearchAgentReq
 	if err := req.JsonParam(c, &listReq); err != nil {
@@ -52,6 +54,7 @@ func (h *Handler) ListAgents(c *gin.Context) {
 	res.Success(c, resp)
 }
 
+// 获取单个 Agent 详情
 func (h *Handler) GetAgent(c *gin.Context) {
 	var id uuid.UUID
 	if err := req.Path(c, "id", &id); err != nil {
@@ -69,6 +72,7 @@ func (h *Handler) GetAgent(c *gin.Context) {
 	res.Success(c, resp)
 }
 
+// 更新 Agent 配置
 func (h *Handler) UpdateAgent(c *gin.Context) {
 	var updateReq UpdateAgentReq
 	if err := req.JsonParam(c, &updateReq); err != nil {
@@ -86,6 +90,7 @@ func (h *Handler) UpdateAgent(c *gin.Context) {
 	res.Success(c, resp)
 }
 
+// 处理AI智能体对话的HTTP接口，采用了SSE（Server-Sent Events）流式响应技术。
 func (h *Handler) AgentMessage(c *gin.Context) {
 	//获取参数
 	var messageReq AgentMessageReq
@@ -132,6 +137,7 @@ func (h *Handler) AgentMessage(c *gin.Context) {
 			//在go中处理消息 如果想要立即发送给客户端需要调用Flush
 			c.Writer.Flush()
 
+		// datachan 的内容主要在 agentMessage 函数的事件处理循环中，通过 sendData 函数写入，数据来源是AI模型的流式响应事件，格式为统一的JSON消息结构。
 		case data, ok := <-datachan:
 			if !ok {
 				//这里代表channel被关闭了 也就是消息结束了

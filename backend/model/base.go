@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// 所有表通用字段，自动维护 ID / 时间
 type BaseModel struct {
 	ID        uuid.UUID      `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
 	CreatedAt time.Time      `json:"createdAt" gorm:"column:created_at;not null"`

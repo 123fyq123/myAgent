@@ -70,6 +70,26 @@ func (s *service) listAgents(ctx context.Context, userID uuid.UUID, req SearchAg
 	}, nil
 }
 
+// getAgent 根据用户ID和代理ID查询智能代理信息
+//
+// 参数:
+//
+//	ctx: 上下文，用于控制请求超时和取消
+//	userID: 用户唯一标识符，用于权限验证
+//	id: 智能代理唯一标识符
+//
+// 返回值:
+//
+//	*model.Agent: 查询到的智能代理对象指针
+//	error: 错误信息，可能包含:
+//	  - errs.DBError: 数据库查询失败
+//	  - biz.AgentNotFound: 代理不存在
+//
+// 功能说明:
+//   - 设置5秒超时上下文，防止长时间阻塞
+//   - 调用repository层查询代理信息
+//   - 处理查询失败和代理不存在的情况
+//   - 返回查询结果或相应错误
 func (s *service) getAgent(ctx context.Context, userID uuid.UUID, id uuid.UUID) (*model.Agent, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
