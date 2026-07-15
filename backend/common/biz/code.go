@@ -34,3 +34,21 @@ var (
 	ErrEmbedding               = errs.NewError(40005, "Embedding错误")
 	ErrRetriever               = errs.NewError(40006, "Retriever错误")
 )
+
+var (
+	ErrAgentCardGetFailed = errs.NewError(50001, "获取AgentCard失败")
+	ErrAgentCardExisted   = errs.NewError(50002, "AgentCard已存在")
+)
+
+var (
+	ErrWorkflowNotFound = errs.NewError(60001, "工作流不存在")
+)
+var (
+	ErrNodeTypeNotExisted = errs.NewError(70001, "节点类型不存在")
+)
+var (
+	ErrSkillNotFound              = errs.NewError(80001, "技能不存在")
+	ErrSkillAlreadyExisted        = errs.NewError(80002, "技能已存在")
+	ErrGithubSourceAlreadyExisted = errs.NewError(80003, "GithubSource已存在")
+	ErrGithubSourceNotFound       = errs.NewError(80004, "GithubSource不存在")
+)

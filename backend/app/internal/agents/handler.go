@@ -16,7 +16,6 @@ type Handler struct {
 	service *service
 }
 
-// 创建 Agent
 func (h *Handler) CreateAgent(c *gin.Context) {
 	var createReq CreateAgentReq
 	if err := req.JsonParam(c, &createReq); err != nil {
@@ -36,7 +35,6 @@ func (h *Handler) CreateAgent(c *gin.Context) {
 	res.Success(c, resp)
 }
 
-// 查询 Agent 列表
 func (h *Handler) ListAgents(c *gin.Context) {
 	var listReq SearchAgentReq
 	if err := req.JsonParam(c, &listReq); err != nil {
@@ -54,7 +52,6 @@ func (h *Handler) ListAgents(c *gin.Context) {
 	res.Success(c, resp)
 }
 
-// 获取单个 Agent 详情
 func (h *Handler) GetAgent(c *gin.Context) {
 	var id uuid.UUID
 	if err := req.Path(c, "id", &id); err != nil {
@@ -72,7 +69,6 @@ func (h *Handler) GetAgent(c *gin.Context) {
 	res.Success(c, resp)
 }
 
-// 更新 Agent 配置
 func (h *Handler) UpdateAgent(c *gin.Context) {
 	var updateReq UpdateAgentReq
 	if err := req.JsonParam(c, &updateReq); err != nil {
@@ -90,7 +86,6 @@ func (h *Handler) UpdateAgent(c *gin.Context) {
 	res.Success(c, resp)
 }
 
-// 处理AI智能体对话的HTTP接口，采用了SSE（Server-Sent Events）流式响应技术。
 func (h *Handler) AgentMessage(c *gin.Context) {
 	//获取参数
 	var messageReq AgentMessageReq
@@ -137,7 +132,6 @@ func (h *Handler) AgentMessage(c *gin.Context) {
 			//在go中处理消息 如果想要立即发送给客户端需要调用Flush
 			c.Writer.Flush()
 
-		// datachan 的内容主要在 agentMessage 函数的事件处理循环中，通过 sendData 函数写入，数据来源是AI模型的流式响应事件，格式为统一的JSON消息结构。
 		case data, ok := <-datachan:
 			if !ok {
 				//这里代表channel被关闭了 也就是消息结束了
@@ -157,7 +151,6 @@ func (h *Handler) AgentMessage(c *gin.Context) {
 				cancel()
 				return
 			}
-			// 强制让服务器把当前内存缓冲区里攒着的数据，立刻、马上通过网络冲刷给前端浏览器，而不是留在后端干等。
 			c.Writer.Flush()
 		case err, ok := <-errchan:
 			if !ok {
@@ -181,37 +174,25 @@ func (h *Handler) AgentMessage(c *gin.Context) {
 
 }
 
-// 更新agent的tools
 func (h *Handler) UpdateAgentTool(c *gin.Context) {
-	// 1. 从 URL 路径参数中提取智能体的 ID (比如请求路径是 /agents/:id/tools)
 	var id uuid.UUID
 	if err := req.Path(c, "id", &id); err != nil {
-		return // 如果提取失败（例如格式不是合法的 UUID），封装的 req.Path 内部通常已经返回了 400 错误，这里直接退出
-	}
-
-	// 2. 从 HTTP 请求体（Body）中解析出前端传过来的 JSON 数据
-	var updateReq UpdateAgentToolReq
-	if err := req.JsonParam(c, &updateReq); err != nil {
-		return // 如果 JSON 格式错误或缺少必要参数，直接拦截并退出
-	}
-
-	// 3. 从 Gin 的上下文 c 中获取当前处于登录状态的用户 ID
-	userID, ok := req.GetUserIdUUID(c)
-	if !ok {
-		return // 如果没获取到，说明用户未登录或 Token 失效，直接拦截
-	}
-
-	// 4. 核心：将校验完的数据打包，向下传递给 Service（业务逻辑）层执行
-	//    传入 Context、当前操作人ID、要修改的智能体ID、以及具体要更新的工具列表数据
-	resp, err := h.service.updateAgentTool(c.Request.Context(), userID, id, updateReq)
-
-	// 5. 统一的响应处理
-	if err != nil {
-		res.Error(c, err) // 如果业务层报错（比如：智能体不存在、用户越权修改别人的智能体、或者数据库挂了），返回对应的错误 JSON
 		return
 	}
-
-	res.Success(c, resp) // 如果一切顺利，使用包装好的标准成功格式（通常是 {"code": 200, "data": ...}）回给前端
+	var updateReq UpdateAgentToolReq
+	if err := req.JsonParam(c, &updateReq); err != nil {
+		return
+	}
+	userID, ok := req.GetUserIdUUID(c)
+	if !ok {
+		return
+	}
+	resp, err := h.service.updateAgentTool(c.Request.Context(), userID, id, updateReq)
+	if err != nil {
+		res.Error(c, err)
+		return
+	}
+	res.Success(c, resp)
 }
 
 func (h *Handler) AddAgentKnowledgeBase(c *gin.Context) {
@@ -254,6 +235,223 @@ func (h *Handler) DeleteAgentKnowledgeBase(c *gin.Context) {
 		return
 	}
 	res.Success(c, resp)
+}
+
+func (h *Handler) AddAgentAgent(c *gin.Context) {
+	var agentRequest AgentMarketRequest
+	if err := req.JsonParam(c, &agentRequest); err != nil {
+		return
+	}
+	userID, ok := req.GetUserIdUUID(c)
+	if !ok {
+		return
+	}
+	resp, err := h.service.addAgentAgent(c.Request.Context(), userID, agentRequest)
+	if err != nil {
+		res.Error(c, err)
+		return
+	}
+	res.Success(c, resp)
+}
+
+func (h *Handler) DeleteAgentAgent(c *gin.Context) {
+	var agentRequest DeleteAgentMarketRequest
+	if err := req.JsonParam(c, &agentRequest); err != nil {
+		return
+	}
+	userID, ok := req.GetUserIdUUID(c)
+	if !ok {
+		return
+	}
+	resp, err := h.service.deleteAgentAgent(c.Request.Context(), userID, agentRequest)
+	if err != nil {
+		res.Error(c, err)
+		return
+	}
+	res.Success(c, resp)
+}
+
+func (h *Handler) AddWorkflowToAgent(c *gin.Context) {
+	var agentId uuid.UUID
+	if err := req.Path(c, "id", &agentId); err != nil {
+		return
+	}
+	var reqs addWorkflowToAgentReq
+	if err := req.JsonParam(c, &reqs); err != nil {
+		return
+	}
+	userID, ok := req.GetUserIdUUID(c)
+	if !ok {
+		return
+	}
+	resp, err := h.service.addWorkflowToAgent(c.Request.Context(), userID, agentId, reqs)
+	if err != nil {
+		res.Error(c, err)
+		return
+	}
+	res.Success(c, resp)
+}
+
+func (h *Handler) DeleteWorkflowFromAgent(c *gin.Context) {
+	var agentId uuid.UUID
+	if err := req.Path(c, "id", &agentId); err != nil {
+		return
+	}
+	var workflowId uuid.UUID
+	if err := req.Path(c, "workflowId", &workflowId); err != nil {
+		return
+	}
+	err := h.service.deleteWorkflowFromAgent(c.Request.Context(), agentId, workflowId)
+	if err != nil {
+		res.Error(c, err)
+		return
+	}
+	res.Success(c, nil)
+}
+
+func (h *Handler) DeleteAgent(c *gin.Context) {
+	var agentId uuid.UUID
+	if err := req.Path(c, "id", &agentId); err != nil {
+		return
+	}
+	err := h.service.deleteAgent(c.Request.Context(), agentId)
+	if err != nil {
+		res.Error(c, err)
+		return
+	}
+	res.Success(c, nil)
+}
+
+func (h *Handler) CreateSession(c *gin.Context) {
+	var param createSessionRequest
+	if err := req.JsonParam(c, &param); err != nil {
+		return
+	}
+	userID, ok := req.GetUserIdUUID(c)
+	if !ok {
+		return
+	}
+	resp, err := h.service.createSession(c.Request.Context(), userID, param)
+	if err != nil {
+		res.Error(c, err)
+		return
+	}
+	res.Success(c, resp)
+}
+
+func (h *Handler) ListSessions(c *gin.Context) {
+	userID, ok := req.GetUserIdUUID(c)
+	if !ok {
+		return
+	}
+	var param listSessionsRequest
+	err := req.QueryParam(c, &param)
+	if err != nil {
+		return
+	}
+	agentId, err := uuid.Parse(param.AgentID)
+	if err != nil {
+		res.Error(c, err)
+		return
+	}
+	resp, err := h.service.listSessions(c.Request.Context(), userID, agentId)
+	if err != nil {
+		res.Error(c, err)
+		return
+	}
+	res.Success(c, resp)
+}
+
+func (h *Handler) GetSessionMessages(c *gin.Context) {
+	var sessionId uuid.UUID
+	if err := req.Path(c, "sessionId", &sessionId); err != nil {
+		return
+	}
+	resp, err := h.service.getSessionMessages(c.Request.Context(), sessionId)
+	if err != nil {
+		res.Error(c, err)
+		return
+	}
+	res.Success(c, resp)
+}
+
+func (h *Handler) DeleteSession(c *gin.Context) {
+	var sessionId uuid.UUID
+	if err := req.Path(c, "sessionId", &sessionId); err != nil {
+		return
+	}
+	err := h.service.deleteSession(c.Request.Context(), sessionId)
+	if err != nil {
+		res.Error(c, err)
+		return
+	}
+	res.Success(c, nil)
+}
+
+func (h *Handler) AddSkillToAgent(c *gin.Context) {
+	var agentId uuid.UUID
+	if err := req.Path(c, "id", &agentId); err != nil {
+		return
+	}
+	var reqs AddAgentSkillReq
+	if err := req.JsonParam(c, &reqs); err != nil {
+		return
+	}
+	userID, ok := req.GetUserIdUUID(c)
+	if !ok {
+		return
+	}
+	resp, err := h.service.addSkillToAgent(c.Request.Context(), userID, agentId, reqs)
+	if err != nil {
+		logs.Errorf("add skill to agent error: %v", err)
+		res.Error(c, err)
+		return
+	}
+	res.Success(c, resp)
+}
+
+func (h *Handler) DeleteSkillFromAgent(c *gin.Context) {
+	var agentId uuid.UUID
+	if err := req.Path(c, "id", &agentId); err != nil {
+		return
+	}
+	var skillId uuid.UUID
+	if err := req.Path(c, "skillId", &skillId); err != nil {
+		return
+	}
+	userID, ok := req.GetUserIdUUID(c)
+	if !ok {
+		return
+	}
+	err := h.service.deleteSkillFromAgent(c.Request.Context(), userID, agentId, skillId)
+	if err != nil {
+		logs.Errorf("delete skill from agent error: %v", err)
+		res.Error(c, err)
+		return
+	}
+	res.Success(c, nil)
+}
+
+func (h *Handler) DeleteAgentTool(c *gin.Context) {
+	var agentId uuid.UUID
+	if err := req.Path(c, "id", &agentId); err != nil {
+		return
+	}
+	var toolId uuid.UUID
+	if err := req.Path(c, "toolId", &toolId); err != nil {
+		return
+	}
+	userID, ok := req.GetUserIdUUID(c)
+	if !ok {
+		return
+	}
+	err := h.service.deleteAgentTool(c.Request.Context(), userID, agentId, toolId)
+	if err != nil {
+		logs.Errorf("delete tool from agent error: %v", err)
+		res.Error(c, err)
+		return
+	}
+	res.Success(c, nil)
 }
 
 func NewHandler() *Handler {

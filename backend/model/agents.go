@@ -58,7 +58,50 @@ type Agent struct {
 
 	Tools          []*Tool          `json:"tools" gorm:"many2many:agent_tools"`
 	KnowledgeBases []*KnowledgeBase `json:"knowledgeBases" gorm:"many2many:agent_knowledge_bases"`
+	Agents         []*AgentMarket   `json:"agentMarkets" gorm:"many2many:agent_agents"`
+	Workflows      []*Workflow      `json:"workflows" gorm:"many2many:agent_workflows"`
+	Skills         []*Skill         `json:"skills" gorm:"many2many:agent_skills"`
+
+	// Mode Agent运行模式：general(通用对话), supervisor(监督者模式), deep(深度编排模式)
+	Mode AgentMode `json:"mode" gorm:"column:agent_mode;type:varchar(50);not null;default:'general'"`
+	// DeepConfig DeepAgent专属配置，JSON格式存储
+	DeepConfig JSON `json:"deepConfig" gorm:"column:deep_config;type:jsonb"`
 }
+
+type AgentMode string
+
+type DeepAgentConfig struct {
+	MaxIterations int         `json:"max_iterations"`
+	EnableTodos   bool        `json:"enable_todos"`
+	SubAgentIDs   []uuid.UUID `json:"sub_agent_ids"`
+}
+
+func (j JSON) ToDeepAgentConfig() *DeepAgentConfig {
+	config := &DeepAgentConfig{
+		EnableTodos:   true,
+		MaxIterations: 10,
+	}
+	if maxIter, ok := j["max_iterations"].(float64); ok {
+		config.MaxIterations = int(maxIter)
+	}
+	if todos, ok := j["enable_todos"].(bool); ok {
+		config.EnableTodos = todos
+	}
+	if subAgentIDs, ok := j["sub_agent_ids"].([]any); ok {
+		for _, id := range subAgentIDs {
+			if agentId, err := uuid.Parse(id.(string)); err == nil {
+				config.SubAgentIDs = append(config.SubAgentIDs, agentId)
+			}
+		}
+	}
+	return config
+}
+
+const (
+	GeneralAgentMode AgentMode = "general"
+	SupervisorMode   AgentMode = "supervisor"
+	DeepAgentMode    AgentMode = "deep"
+)
 
 // TableName 返回表名
 func (Agent) TableName() string {
@@ -192,4 +235,79 @@ type AgentKnowledgeBase struct {
 // TableName 返回表名
 func (AgentKnowledgeBase) TableName() string {
 	return "agent_knowledge_bases"
+}
+
+type AgentAgent struct {
+	AgentId       uuid.UUID   `json:"agentId"`
+	AgentMarketId uuid.UUID   `json:"agentMarketId" `
+	AgentMarket   AgentMarket `json:"agentMarket" gorm:"foreignKey:agent_market_id"`
+}
+
+func (AgentAgent) TableName() string {
+	return "agent_agents"
+}
+
+type AgentWorkflow struct {
+	AgentID    uuid.UUID `json:"agent_id" gorm:"column:agent_id;type:uuid;not null;primaryKey;index:idx_agent_id_status"`
+	WorkflowID uuid.UUID `json:"workflow_id" gorm:"column:workflow_id;type:uuid;not null;primaryKey;index:idx_workflow_id"`
+
+	IsDefault        bool      `json:"is_default" gorm:"column:is_default;type:boolean;not null;default:false"`
+	TriggerCondition string    `json:"trigger_condition" gorm:"column:trigger_condition;type:varchar(255)"`
+	Priority         int       `json:"priority" gorm:"column:priority;type:int;not null;default:0"`
+	Status           string    `json:"status" gorm:"column:status;type:varchar(20);not null;default:'enabled'"`
+	CreatedAt        time.Time `json:"created_at" gorm:"column:created_at;type:timestamptz;not null;default:CURRENT_TIMESTAMP"`
+
+	// 关联关系
+	Workflow *Workflow `json:"workflow" gorm:"foreignKey:WorkflowID"`
+}
+
+func (AgentWorkflow) TableName() string {
+	return "agent_workflows"
+}
+
+type ChatSession struct {
+	BaseModel
+	AgentID  uuid.UUID     `json:"agentId" gorm:"type:uuid;not null;index"`
+	UserID   uuid.UUID     `json:"userId" gorm:"type:uuid;not null;index"`
+	Title    string        `json:"title" gorm:"type:varchar(255)"`
+	Messages []ChatMessage `json:"messages" gorm:"foreignKey:session_id"`
+}
+
+// TableName returns the table name for ChatSession
+func (ChatSession) TableName() string {
+	return "chat_sessions"
+}
+
+// ChatMessage represents a single message in a chat session
+type ChatMessage struct {
+	BaseModel
+	SessionID uuid.UUID `json:"sessionId" gorm:"type:uuid;not null;index"`
+	Role      string    `json:"role" gorm:"type:varchar(50);not null"` // user, assistant, system
+	Content   string    `json:"content" gorm:"type:text;not null"`
+}
+
+// TableName returns the table name for ChatMessage
+func (ChatMessage) TableName() string {
+	return "chat_messages"
+}
+
+// AgentSkill Agent与技能的关联
+type AgentSkill struct {
+	// AgentID Agent ID
+	AgentID uuid.UUID `json:"agentId" gorm:"column:agent_id;type:uuid;not null;primaryKey;index:idx_agent_skill"`
+	// SkillID Skill ID
+	SkillID uuid.UUID `json:"skillId" gorm:"column:skill_id;type:uuid;not null;primaryKey;index:idx_skill_agent"`
+	// Status 关联状态
+	Status string `json:"status" gorm:"column:status;type:varchar(20);not null;default:'active'"`
+	// CreatedAt 创建时间
+	CreatedAt time.Time `json:"createdAt" gorm:"column:created_at;type:timestamptz;not null;default:CURRENT_TIMESTAMP"`
+	// UpdatedAt 更新时间
+	UpdatedAt time.Time `json:"updatedAt" gorm:"column:updated_at;type:timestamptz;not null;default:CURRENT_TIMESTAMP"`
+	// 关联关系
+	Skill *Skill `json:"skill" gorm:"foreignKey:SkillID"`
+}
+
+// TableName 返回表名
+func (AgentSkill) TableName() string {
+	return "agent_skills"
 }

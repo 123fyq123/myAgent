@@ -42,33 +42,19 @@ const (
 
 type KnowledgeBase struct {
 	BaseModel
-	// 所有者信息相关
-	// 所有者 & 基础信息
-	CreatorID uuid.UUID `json:"creatorId" gorm:"column:creator_id;type:uuid;not null;index"`
-	// 知识库名称
-	Name string `json:"name" gorm:"column:name;type:varchar(255);not null;index"`
-	// 说明
-	Description string `json:"description" gorm:"column:description;type:text"`
-
-	// 模型配置相关
-	// 聊天模型
-	ChatModelName string `json:"chatModelName" gorm:"column:chat_model_name;type:varchar(255)"`
-	// openai / azure
-	ChatModelProvider string `json:"chatModelProvider" gorm:"column:chat_model_provider;type:varchar(50)"`
-	// embedding模型
-	EmbeddingModelName string `json:"embeddingModelName" gorm:"column:embedding_model_name;type:varchar(255)"`
-	// embedding模型提供商
-	EmbeddingModelProvider string `json:"embeddingModelProvider" gorm:"column:embedding_model_provider;type:varchar(50)"`
-	// 向量维度
-	EmbeddingDimension int `json:"embeddingDimension" gorm:"column:embedding_dimension;type:integer;not null"`
-	// 知识存在哪（ES / Milvus / PGVector）
-	StorageType StorageType `json:"storageType" gorm:"column:storage_type;type:varchar(50);not null;default:'es'"`
-	// 数据库配置
-	StorageConfig JSON `json:"storageConfig" gorm:"column:storage_config;type:jsonb"`
-	// 性能优化
-	DocumentCount uint                `json:"documentCount" gorm:"column:document_count;type:integer;not null;default:0"`
-	Tags          StringArrayJSON     `json:"tags" gorm:"column:tags;type:jsonb"`
-	Status        KnowledgeBaseStatus `json:"status" gorm:"column:status;type:varchar(20);not null;default:'active'"`
+	CreatorID              uuid.UUID           `json:"creatorId" gorm:"column:creator_id;type:uuid;not null;index"`
+	Name                   string              `json:"name" gorm:"column:name;type:varchar(255);not null;index"`
+	Description            string              `json:"description" gorm:"column:description;type:text"`
+	ChatModelName          string              `json:"chatModelName" gorm:"column:chat_model_name;type:varchar(255)"`
+	ChatModelProvider      string              `json:"chatModelProvider" gorm:"column:chat_model_provider;type:varchar(50)"`
+	EmbeddingModelName     string              `json:"embeddingModelName" gorm:"column:embedding_model_name;type:varchar(255)"`
+	EmbeddingModelProvider string              `json:"embeddingModelProvider" gorm:"column:embedding_model_provider;type:varchar(50)"`
+	EmbeddingDimension     int                 `json:"embeddingDimension" gorm:"column:embedding_dimension;type:integer;not null"`
+	StorageType            StorageType         `json:"storageType" gorm:"column:storage_type;type:varchar(50);not null;default:'es'"`
+	StorageConfig          JSON                `json:"storageConfig" gorm:"column:storage_config;type:jsonb"`
+	DocumentCount          uint                `json:"documentCount" gorm:"column:document_count;type:integer;not null;default:0"`
+	Tags                   StringArrayJSON     `json:"tags" gorm:"column:tags;type:jsonb"`
+	Status                 KnowledgeBaseStatus `json:"status" gorm:"column:status;type:varchar(20);not null;default:'active'"`
 
 	// 关联关系
 	Agents []Agent `json:"agents" gorm:"many2many:agent_knowledge_bases;"`
