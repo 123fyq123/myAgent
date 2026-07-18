@@ -1,0 +1,2 @@
+# app/internal/inits
+app\internal\inits\inits.go:66:59: undefined: tools.ApiKey

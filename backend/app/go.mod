@@ -3,19 +3,21 @@ module app
 go 1.25.0
 
 require (
-	github.com/PuerkitoBio/goquery v1.8.1
+	github.com/PuerkitoBio/goquery v1.11.0
 	github.com/cloudwego/eino v0.8.7
-	github.com/cloudwego/eino-ext/a2a v0.0.1-alpha.7
+	github.com/cloudwego/eino-ext/a2a v0.0.1-alpha.9
+	github.com/cloudwego/eino-ext/adk/backend/local v0.2.4
 	github.com/cloudwego/eino-ext/components/document/loader/file v0.0.0-20251223041451-fede3afb5715
-	github.com/cloudwego/eino-ext/components/document/parser/docx v0.0.0-20260109062358-b9080dbc7bed
+	github.com/cloudwego/eino-ext/components/document/parser/docx v0.0.0-20260214075714-8f11ae8e65a2
 	github.com/cloudwego/eino-ext/components/document/parser/html v0.0.0-20260109062358-b9080dbc7bed
-	github.com/cloudwego/eino-ext/components/document/parser/pdf v0.0.0-20260109062358-b9080dbc7bed
-	github.com/cloudwego/eino-ext/components/model/ollama v0.1.6
-	github.com/cloudwego/eino-ext/components/model/openai v0.1.5
-	github.com/cloudwego/eino-ext/components/model/qwen v0.1.2
+	github.com/cloudwego/eino-ext/components/document/parser/pdf v0.0.0-20260214075714-8f11ae8e65a2
+	github.com/cloudwego/eino-ext/components/model/ollama v0.1.8
+	github.com/cloudwego/eino-ext/components/model/openai v0.1.8
+	github.com/cloudwego/eino-ext/components/model/qwen v0.1.5
 	github.com/eino-contrib/ollama v0.1.0
 	github.com/elastic/go-elasticsearch/v8 v8.16.0
 	github.com/gin-gonic/gin v1.11.0
+	github.com/go-git/go-git/v5 v5.17.2
 	github.com/google/uuid v1.6.0
 	github.com/milvus-io/milvus-sdk-go/v2 v2.4.2
 	github.com/mszlu521/thunder v1.0.5
@@ -32,7 +34,7 @@ require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.1.6 // indirect
-	github.com/andybalholm/cascadia v1.3.1 // indirect
+	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/anthropics/anthropic-sdk-go v1.4.0 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.33.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.3 // indirect
@@ -60,7 +62,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudflare/circl v1.6.3 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
-	github.com/cloudwego/eino-ext/adk/backend/local v0.2.4 // indirect
 	github.com/cloudwego/eino-ext/components/embedding/ark v0.1.1 // indirect
 	github.com/cloudwego/eino-ext/components/embedding/dashscope v0.0.0-20251114102822-95f6d97bd4ee // indirect
 	github.com/cloudwego/eino-ext/components/embedding/gemini v0.0.0-20251114102822-95f6d97bd4ee // indirect
@@ -73,11 +74,10 @@ require (
 	github.com/cloudwego/eino-ext/components/model/deepseek v0.0.0-20251114102822-95f6d97bd4ee // indirect
 	github.com/cloudwego/eino-ext/components/model/gemini v0.1.13 // indirect
 	github.com/cloudwego/eino-ext/components/model/qianfan v0.1.2 // indirect
-	github.com/cloudwego/eino-ext/components/retriever/milvus v0.0.0-20260331071634-4f359694d2d9 // indirect
-	github.com/cloudwego/eino-ext/components/tool/mcp v0.0.7 // indirect
-	github.com/cloudwego/eino-ext/libs/acl/openai v0.1.2 // indirect
+	github.com/cloudwego/eino-ext/components/tool/mcp v0.0.8 // indirect
+	github.com/cloudwego/eino-ext/libs/acl/openai v0.1.13 // indirect
 	github.com/cloudwego/gopkg v0.1.4 // indirect
-	github.com/cloudwego/hertz v0.10.2 // indirect
+	github.com/cloudwego/hertz v0.10.3 // indirect
 	github.com/cloudwego/netpoll v0.7.0 // indirect
 	github.com/cockroachdb/errors v1.9.1 // indirect
 	github.com/cockroachdb/logtags v0.0.0-20211118104740-dabe8e521a4f // indirect
@@ -93,13 +93,11 @@ require (
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/evanphx/json-patch v0.5.2 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
-	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.8 // indirect
 	github.com/getsentry/sentry-go v0.12.0 // indirect
 	github.com/gin-contrib/sse v1.1.0 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.8.0 // indirect
-	github.com/go-git/go-git/v5 v5.17.2 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/jsonpointer v0.21.1 // indirect
@@ -150,10 +148,10 @@ require (
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
-	github.com/mark3labs/mcp-go v0.43.0 // indirect
+	github.com/mark3labs/mcp-go v0.44.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
-	github.com/meguminnnnnnnnn/go-openai v0.1.0 // indirect
+	github.com/meguminnnnnnnnn/go-openai v0.1.1 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
 	github.com/milvus-io/milvus-proto/go-api/v2 v2.4.10-0.20240819025435-512e3b98866a // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
@@ -164,6 +162,7 @@ require (
 	github.com/nyaruka/phonenumbers v1.0.55 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/ollama/ollama v0.9.6 // indirect
+	github.com/onsi/gomega v1.38.2 // indirect
 	github.com/openai/openai-go v1.10.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pjbgf/sha1cd v0.3.2 // indirect
@@ -197,7 +196,6 @@ require (
 	github.com/volcengine/volc-sdk-golang v1.0.23 // indirect
 	github.com/volcengine/volcengine-go-sdk v1.1.44 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
-	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	github.com/yargevad/filepathx v1.0.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
@@ -208,7 +206,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.35.0 // indirect
 	go.uber.org/mock v0.5.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	golang.org/x/arch v0.20.0 // indirect
 	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90 // indirect
 	golang.org/x/mod v0.34.0 // indirect
@@ -219,21 +216,12 @@ require (
 	google.golang.org/genai v1.34.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250324211829-b45e905df463 // indirect
 	google.golang.org/grpc v1.73.0 // indirect
-	google.golang.org/protobuf v1.36.9 // indirect
-	gopkg.in/inf.v0 v0.9.1 // indirect
+	google.golang.org/grpc/examples v0.0.0-20230224211313-3775f633ce20 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/mysql v1.5.7 // indirect
 	gorm.io/driver/postgres v1.6.0 // indirect
-	k8s.io/api v0.35.1 // indirect
-	k8s.io/apimachinery v0.35.1 // indirect
-	k8s.io/client-go v0.35.1 // indirect
-	k8s.io/klog/v2 v2.130.1 // indirect
-	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912 // indirect
-	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4 // indirect
-	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
-	sigs.k8s.io/randfill v1.0.0 // indirect
-	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
 )

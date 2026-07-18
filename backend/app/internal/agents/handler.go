@@ -16,6 +16,10 @@ type Handler struct {
 	service *service
 }
 
+// 基于 Go 语言 Gin 框架编写的 HTTP Handler（控制器层） 代码。
+// 它属于一个 AI Agent（智能体）管理系统的核心后端接口，负责处理前端请求并调用底层的 Service 层业务逻辑。
+
+// 创建智能体。
 func (h *Handler) CreateAgent(c *gin.Context) {
 	var createReq CreateAgentReq
 	if err := req.JsonParam(c, &createReq); err != nil {

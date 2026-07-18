@@ -47,12 +47,16 @@ import (
 	"gorm.io/gorm"
 )
 
+// service 编排知识库业务：关系库元数据、文件解析、嵌入模型、Milvus 与 Elasticsearch。
+// repo 管理 PostgreSQL，两个客户端分别服务于向量检索和全文/索引清理。
 type service struct {
 	repo         repository
 	esClient     *elasticsearch.Client
 	milvusClient client.Client
 }
 
+// createKnowledgeBase 将前端模型配置转换为知识库元数据并写入 PostgreSQL。
+// 此处只创建知识库记录；向量集合会在文档首次处理时按需使用。
 func (s *service) createKnowledgeBase(ctx context.Context, userId uuid.UUID, req createKnowledgeBaseReq) (any, error) {
 	kb := model.KnowledgeBase{
 		BaseModel: model.BaseModel{
@@ -78,62 +82,82 @@ func (s *service) createKnowledgeBase(ctx context.Context, userId uuid.UUID, req
 	return &kb, nil
 }
 
+// listKnowledgeBases 内部服务层方法：根据用户ID和查询参数获取知识库分页列表
 func (s *service) listKnowledgeBases(ctx context.Context, userId uuid.UUID, params listReq) (*ListResp, error) {
+	// 1. 设置默认页码：如果前端传入的页码小于等于 0，则默认查询第 1 页
 	page := params.Page
 	if page <= 0 {
 		page = 1
 	}
+
+	// 2. 设置默认每页大小：如果未传入或小于等于 0，则默认每页展示 10 条数据
 	size := params.PageSize
 	if size <= 0 {
 		size = 10
 	}
+
+	// 3. 构建数据库查询过滤器，将“页码/数量”转换为 SQL 的 “Limit/Offset” 限制
 	filter := KnowledgeBaseFilter{
-		Search: params.Search,
-		Limit:  size,
-		Offset: (page - 1) * size,
+		Search: params.Search,     // 模糊搜索关键词
+		Limit:  size,              // 限制返回的记录数
+		Offset: (page - 1) * size, // 数据的偏移量（跳过前多少条记录）
 	}
+
+	// 4. 调用 Repository 仓储层，从数据库中查询匹配的知识库列表及总记录数
 	kbs, total, err := s.repo.listKnowledgeBases(ctx, userId, filter)
 	if err != nil {
+		// 记录错误日志，并向外返回统一定义的数据库内部错误（屏蔽底层敏感信息）
 		logs.Errorf("list knowledge base error: %v", err)
 		return nil, errs.DBError
 	}
+
+	// 5. 成功获取数据，封装分页结果并返回
 	return &ListResp{
-		KnowledgeBases: kbs,
-		Total:          total,
+		KnowledgeBases: kbs,   // 当前页的知识库数据切片
+		Total:          total, // 满足查询条件的总数据量，用于前端生成分页器
 	}, nil
 }
 
+// getKnowledgeBase 内部服务层方法：根据用户ID和知识库ID获取详细信息，并动态统计其关联的文档数据
 func (s *service) getKnowledgeBase(ctx context.Context, userId uuid.UUID, id uuid.UUID) (*KnowledgeBaseResponse, error) {
+	// 1. 调用 Repository 仓储层，查询指定用户名下的知识库基础信息
 	kb, err := s.repo.getKnowledgeBase(ctx, userId, id)
 	if err != nil {
+		// 记录错误日志，向外返回统一定义的数据库内部错误
 		logs.Errorf("get knowledge base error: %v", err)
 		return nil, errs.DBError
 	}
-	//统计文档数和总字节数
+
+	// 2. 动态统计该知识库名下所有文档的【总大小 (字节数)】和【文档总数】
+	// 这样做能保证前端拿到的文档体积和数量是实时且准确的
 	totalSize, docCount, err := s.repo.countKnowledgeBaseDocuments(ctx, kb.ID)
 	if err != nil {
+		// 统计失败时记录日志，并同样返回数据库内部错误
 		logs.Errorf("count knowledge base documents error: %v", err)
 		return nil, errs.DBError
 	}
+
+	// 3. 将数据库模型（Model）组装映射为前端所需的响应结构体（DTO）
 	return &KnowledgeBaseResponse{
 		Id:                     kb.ID,
 		Name:                   kb.Name,
 		Description:            kb.Description,
-		EmbeddingModelName:     kb.EmbeddingModelName,
-		EmbeddingModelProvider: kb.EmbeddingModelProvider,
-		ChatModelName:          kb.ChatModelName,
-		ChatModelProvider:      kb.ChatModelProvider,
-		StorageType:            kb.StorageType,
-		StorageConfig:          kb.StorageConfig,
-		Tags:                   kb.Tags,
-		TotalSize:              totalSize,
-		DocumentCount:          int(docCount),
-		CreatorId:              kb.CreatorID,
-		CreatedAt:              kb.CreatedAt.Unix(),
-		UpdatedAt:              kb.UpdatedAt.Unix(),
+		EmbeddingModelName:     kb.EmbeddingModelName,     // 向量化模型名称
+		EmbeddingModelProvider: kb.EmbeddingModelProvider, // 向量化模型厂商
+		ChatModelName:          kb.ChatModelName,          // 对话模型名称
+		ChatModelProvider:      kb.ChatModelProvider,      // 对话模型厂商
+		StorageType:            kb.StorageType,            // 存储类型（如 es, pgvector 等）
+		StorageConfig:          kb.StorageConfig,          // 存储的配置信息 (JSONB)
+		Tags:                   kb.Tags,                   // 标签列表
+		TotalSize:              totalSize,                 // 动态统计出的文档总大小 (Bytes)
+		DocumentCount:          int(docCount),             // 动态统计出的文档总数 (转为 int)
+		CreatorId:              kb.CreatorID,              // 创建者 ID
+		CreatedAt:              kb.CreatedAt.Unix(),       // 创建时间（转换为秒级时间戳）
+		UpdatedAt:              kb.UpdatedAt.Unix(),       // 更新时间（转换为秒级时间戳）
 	}, nil
 }
 
+// updateKnowledgeBase 先确认归属，再按非空字段覆盖可编辑配置，避免空值误清空旧配置。
 func (s *service) updateKnowledgeBase(ctx context.Context, userId uuid.UUID, id uuid.UUID, req updateKnowledgeBaseReq) (any, error) {
 	kb, err := s.repo.getKnowledgeBase(ctx, userId, id)
 	if err != nil {
@@ -169,6 +193,7 @@ func (s *service) updateKnowledgeBase(ctx context.Context, userId uuid.UUID, id 
 	return kb, nil
 }
 
+// deleteKnowledgeBase 删除知识库元数据；调用前先验证当前用户拥有该知识库。
 func (s *service) deleteKnowledgeBase(ctx context.Context, userId uuid.UUID, id uuid.UUID) error {
 	kb, err := s.repo.getKnowledgeBase(ctx, userId, id)
 	if err != nil {
@@ -186,6 +211,7 @@ func (s *service) deleteKnowledgeBase(ctx context.Context, userId uuid.UUID, id 
 	return nil
 }
 
+// listDocuments 将 HTTP 分页参数转换为仓储层的 Limit/Offset 查询。
 func (s *service) listDocuments(ctx context.Context, userId uuid.UUID, kbId uuid.UUID, params listDocumentReq) (*ListDocumentsResp, error) {
 	page := params.Page
 	if page <= 0 {
@@ -212,6 +238,8 @@ func (s *service) listDocuments(ctx context.Context, userId uuid.UUID, kbId uuid
 	}, nil
 }
 
+// uploadDocuments 同步完成文件接收与文档登记，随后异步完成解析、切分、嵌入和索引。
+// 调用方应通过文档 status 判断后台任务是否完成，而非假定接口返回即已可检索。
 func (s *service) uploadDocuments(ctx context.Context, userId uuid.UUID, kbId uuid.UUID, uploadFile *multipart.FileHeader) (any, error) {
 	//读取文件信息，创建Document对象
 	//读取文件内容，进行向量化和索引，其中要进行切分，切分后的数据存入documentchunk表中
@@ -356,6 +384,8 @@ const (
 	childOverlapSize = 150 // 子块重叠的长度
 )
 
+// processDocumentAndVectorAndStore 按文件类型生成父分片和子分片，并同步保存关系库与向量库。
+// 父分片用于给模型提供完整上下文，子分片用于更细粒度的语义召回。
 func (s *service) processDocumentAndVectorAndStore(ctx context.Context, doc *model.Document, docs []*schema.Document, kb *model.KnowledgeBase) error {
 	//获取文档内容
 	var content string
@@ -421,6 +451,7 @@ func (s *service) processDocumentAndVectorAndStore(ctx context.Context, doc *mod
 	return s.saveToStores(ctx, kb, parentModels, childSchemaDocs)
 }
 
+// processMarkdown 按 Markdown 标题层级生成较完整的父分片，再按窗口切出用于向量检索的子分片。
 func (s *service) processMarkdown(content string, doc *model.Document, parentModels []*model.DocumentChunk, kb *model.KnowledgeBase, childSchemaDocs []*schema.Document) ([]*model.DocumentChunk, []*schema.Document) {
 	h1Title := utils.ExtractTitle(content, "#")
 	if h1Title == "" {
@@ -470,6 +501,7 @@ func (s *service) processMarkdown(content string, doc *model.Document, parentMod
 	return parentModels, childSchemaDocs
 }
 
+// createTempFileFromUploadFile 将 multipart 上传流落为临时文件，供仅接受文件路径的解析器读取。
 func (s *service) createTempFileFromUploadFile(src multipart.File, fileName string) (*os.File, error) {
 	//创建一个临时文件
 	tempFile, err := os.CreateTemp("", "upload-*.tmp")
@@ -494,23 +526,37 @@ func (s *service) createTempFileFromUploadFile(src multipart.File, fileName stri
 	return tempFile, nil
 }
 
+// getEmbeddingConfig 内部服务层方法：根据厂商、模型名称和用户ID，动态加载并初始化对应的向量化（Embedding）客户端实例
+// getEmbeddingConfig 根据知识库绑定的提供商和模型名创建嵌入器，用于入库和检索时保持同一向量空间。
 func (s *service) getEmbeddingConfig(provider string, embeddingModelName string, creatorID uuid.UUID) (embedding.Embedder, error) {
+
+	// 1. 触发内置事件总线（Event Bus）或插件系统
+	// 核心考量：模型配置信息（API Key, Base URL 等）可能由其他微服务、模块或专门的模型管理模块维护。
+	// 这里通过事件机制解耦，异步或同步去获取该用户专属的向量模型详细配置信息。
 	trigger, err := event.Trigger("getEmbeddingConfig", &shared.LLMParams{
-		Provider:  provider,
-		Model:     embeddingModelName,
-		UserId:    creatorID,
-		ModelType: model.LLMTypeEmbedding,
+		Provider:  provider,               // 模型厂商（如: openai, ollama）
+		Model:     embeddingModelName,     // 模型名称（如: text-embedding-3-small）
+		UserId:    creatorID,              // 用户 ID（用于捞取该用户自己配置的私有 API Key）
+		ModelType: model.LLMTypeEmbedding, // 指定模型类型为嵌入式向量模型 (Embedding)
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	// 2. 将事件触发返回的结果（interface{} 类型）断言转换为预期的结构体指针
 	response := trigger.(*shared.EmbeddingConfigResponse)
+
+	// 3. 使用大模型框架（这里使用的是 einos 框架）动态加载并驱动 Embedding 实例
+	// 传入厂商标识和拼装好的模型配置（ToEmbeddingConfig 包含了最终的 APIKey、Endpoint 等秘密信息）
 	embedder, err := einos.LoadEmbedding(context.Background(),
 		response.Model.ProviderConfig.Provider,
 		response.Model.ToEmbeddingConfig())
+
+	// 4. 返回初始化完毕的、立即可用的向量化客户端实例（实现了 embedding.Embedder 接口）
 	return embedder, err
 }
 
+// deleteDocuments 协调删除 PostgreSQL 文档/分片、Elasticsearch 索引和 Milvus 向量，避免残留检索结果。
 func (s *service) deleteDocuments(ctx context.Context, userId uuid.UUID, kbId uuid.UUID, documentId uuid.UUID) error {
 	//先确认参数正确
 	knowledgeBase, err := s.repo.getKnowledgeBase(ctx, userId, kbId)
@@ -563,6 +609,7 @@ func (s *service) deleteDocuments(ctx context.Context, userId uuid.UUID, kbId uu
 	return nil
 }
 
+// deleteEsIndex 删除文档在 Elasticsearch 中的索引记录；当前主检索虽使用 Milvus，仍保留清理逻辑。
 func (s *service) deleteEsIndex(ctx context.Context, kbId uuid.UUID, documentId uuid.UUID) error {
 	index := s.buildIndex(kbId)
 	//需要删除doc_id这个字段匹配的文档
@@ -598,6 +645,7 @@ func (s *service) deleteEsIndex(ctx context.Context, kbId uuid.UUID, documentId 
 	return nil
 }
 
+// buildIndex 为每个知识库生成隔离的向量集合/索引名称。
 func (s *service) buildIndex(kbId uuid.UUID) string {
 	sprintf := fmt.Sprintf("kb_%s", kbId.String())
 	sprintf = strings.ReplaceAll(sprintf, "-", "_")
@@ -608,11 +656,16 @@ const (
 	maxSearchResult = 5 //设置一个最大搜索结果数量
 )
 
+// searchKnowledgeBase 核心业务层方法：处理高级知识库检索逻辑（支持 LLM 意图提取与父子分段召回）
+// searchKnowledgeBase 执行 RAG 检索：解析问题意图、向量召回子分片，再回填完整父分片。
 func (s *service) searchKnowledgeBase(ctx context.Context, userId uuid.UUID, kbId uuid.UUID, params searchParams) (*SearchResponse, error) {
-	//记录开始时间
+	// 1. 记录函数开始时间，用于统计整个检索流程的耗时
 	startTime := time.Now()
+
+	// 2. 根据知识库唯一 ID 构建对应的向量数据库索引/集合名称
 	index := s.buildIndex(kbId)
-	//验证知识库是否存在
+
+	// 3. 验证知识库是否存在，并校验用户是否拥有该知识库的访问权限
 	knowledgeBase, err := s.repo.getKnowledgeBase(ctx, userId, kbId)
 	if err != nil {
 		logs.Errorf("get knowledge base error: %v", err)
@@ -621,31 +674,41 @@ func (s *service) searchKnowledgeBase(ctx context.Context, userId uuid.UUID, kbI
 	if knowledgeBase == nil {
 		return nil, biz.ErrKnowledgeBaseNotFound
 	}
+
+	// 4. 空值防御：如果用户的查询词为空，直接返回标准的空结果结构体，避免无效计算
 	if params.Query == "" {
-		//返回空结果
 		return &SearchResponse{
 			KbId:    kbId,
 			Query:   params.Query,
 			Results: []*SearchResult{},
-			Took:    time.Since(startTime).Microseconds(),
+			Took:    time.Since(startTime).Microseconds(), // 计算微秒级耗时
 			Total:   0,
 		}, nil
 	}
-	//我们这里调用大模型对用户的问题进行关键的信息提取，比如一百章讲了什么，提取到100这个章节数，可以通过元数据进行精确匹配
+
+	// 5. 【RAG 优化亮点 1】调用大模型（LLM）解析查询意图
+	// 例如：用户问“第100章讲了什么？”，LLM 能精准提取出章节数 100 及其关键字，
+	// 后续可以通过精确匹配（Metadata Filter）大幅缩减向量搜索范围，提升检索准确率。
 	intent, _ := s.parseQueryIntent(ctx, knowledgeBase, params.Query)
-	//获取到向量模型配置
+
+	// 6. 获取当前知识库配置的向量化（Embedding）模型实例
 	embedder, err := s.getEmbeddingConfig(knowledgeBase.EmbeddingModelProvider, knowledgeBase.EmbeddingModelName, userId)
 	if err != nil {
 		logs.Errorf("get embedding config error: %v", err)
 		return nil, biz.ErrEmbeddingConfigNotFound
 	}
-	//这里正常需要根据知识库中的存储类型判断，因为前端没有修改的地方 我们就以写死的方式进行替换不同的存储
-	//store, err := kbs.NewESVectorStore(ctx, s.esClient, index, embedder)
+
+	// 7. 初始化向量数据库存储引擎（这里为了简化写死用了 Milvus，也可以切换成注释中的 ES）
+	// 初始化一个具备特定配置的“查询工具人”
+	// store, err := kbs.NewESVectorStore(ctx, s.esClient, index, embedder)
 	store, err := kbs.NewMilvusVectorStore(ctx, s.milvusClient, index, embedder)
 	if err != nil {
 		logs.Errorf("new vector store error: %v", err)
 		return nil, err
 	}
+
+	// 8. 组装元数据过滤条件（Metadata Filter）
+	// 如果 LLM 成功解析出了具体的章节或卷号，将其注入过滤器进行硬过滤
 	filter := make(kbs.SearchFilter)
 	if intent.ChapterNum > 0 {
 		filter["chapter_num"] = intent.ChapterNum
@@ -653,26 +716,35 @@ func (s *service) searchKnowledgeBase(ctx context.Context, userId uuid.UUID, kbI
 	if intent.VolumeNum > 0 {
 		filter["volume_num"] = intent.VolumeNum
 	}
+
+	// 9. 执行向量检索，传入提取的关键字、召回数量（10条）以及过滤条件
+	// 这里搜索出的是粒度较小的“子文档分段 (Child Docs)”
 	childDocs, err := store.Search(ctx, intent.Keywords, 10, filter)
 	if err != nil {
 		logs.Errorf("search error: %v", err)
 		return nil, err
 	}
-	//我们需要查找匹配的子分段文档对应的父分段内容
-	parentIdMap := make(map[string]float64) //doc_chunk_id:score
-	var orderedParentIds []string
+
+	// 10. 【RAG 优化亮点 2：父子分段机制】
+	// 向量库中存的是信息密度高的短分段（子），但为了给大模型提供更完整的上下文，
+	// 我们需要通过子文档里的 parent_id 去关联网页/数据库里更长更完整的原始分段（父）。
+	parentIdMap := make(map[string]float64) // 用于存储映射关系 doc_chunk_id -> score
+	var orderedParentIds []string           // 用于保持子文档原本从高到低的分数排序顺序
+
 	for _, cd := range childDocs {
 		pId, ok := cd.MetaData["parent_id"].(string)
 		if !ok {
 			continue
 		}
-		//记录pid childDocs是按照分数从高到低排序的 我们记录一下顺序
+
+		// 对父 ID 进行去重，并在第一次见到时记录其原本的向量分值和排序顺序
 		if _, seen := parentIdMap[pId]; !seen {
-			//后续如果父分段内容过多，我们只需要取前几个
 			orderedParentIds = append(orderedParentIds, pId)
-			parentIdMap[pId] = cd.Score()
+			parentIdMap[pId] = cd.Score() // 记录该父段对应的最高匹配分数
 		}
 	}
+
+	// 11. 如果没有召回到任何有效的父文档 ID，直接返回空结果
 	if len(orderedParentIds) == 0 {
 		return &SearchResponse{
 			KbId:  kbId,
@@ -681,27 +753,34 @@ func (s *service) searchKnowledgeBase(ctx context.Context, userId uuid.UUID, kbI
 			Total: 0,
 		}, nil
 	}
+
+	// 12. 截断阈值防御：限制返回给大模型的最大上下文数量
+	// 防止召回过多低相关度的数据，既浪费 Token 也会干扰大模型的判断
 	if len(orderedParentIds) > maxSearchResult {
-		//这里主要是为了防止知识库查询出来的内容过多，相似度太低的没有必要提供给大模型
 		orderedParentIds = orderedParentIds[:maxSearchResult]
 	}
-	//获取父分段内容
+
+	// 13. 去关系型数据库（Repository）中批量批量查询出这些父分段的“完整文本内容”
 	parentChunks, err := s.repo.getDocumentChunksByIds(ctx, orderedParentIds)
 	if err != nil {
 		logs.Errorf("get document chunks error: %v", err)
 		return nil, errs.DBError
 	}
+
+	// 14. 重新组装成前端和 LLM 所需的搜索结果列表
 	results := make([]*SearchResult, 0, len(parentChunks))
 	for i, chunk := range parentChunks {
 		results = append(results, &SearchResult{
-			Content:    chunk.Content,
-			DocumentId: chunk.DocumentID,
-			Id:         chunk.ID,
-			Metadata:   chunk.MetaInfo,
-			Position:   i,
-			Score:      parentIdMap[chunk.ID.String()],
+			Content:    chunk.Content,                  // 完整的父分段文本内容
+			DocumentId: chunk.DocumentID,               // 所属文档的 ID
+			Id:         chunk.ID,                       // 当前分段的 ID
+			Metadata:   chunk.MetaInfo,                 // 元数据信息
+			Position:   i,                              // 排序位置（从 0 开始）
+			Score:      parentIdMap[chunk.ID.String()], // 回填刚才记录的向量匹配分数
 		})
 	}
+
+	// 15. 构建最终响应，返回结果集及整个知识库检索过程的总耗时
 	return &SearchResponse{
 		KbId:    kbId,
 		Query:   params.Query,
@@ -711,6 +790,7 @@ func (s *service) searchKnowledgeBase(ctx context.Context, userId uuid.UUID, kbI
 	}, nil
 }
 
+// parseMarkdownHeaders 将 Markdown 的标题与正文拆为带层级元数据的文档片段。
 func (s *service) parseMarkdownHeaders(content string) []*schema.Document {
 	var docs []*schema.Document
 	scanner := bufio.NewScanner(strings.NewReader(content))
@@ -776,6 +856,7 @@ func (s *service) parseMarkdownHeaders(content string) []*schema.Document {
 	return docs
 }
 
+// buildChildSchemaDoc 构造可写入向量库的子分片，并附带父分片、文档和知识库关联信息。
 func (s *service) buildChildSchemaDoc(parentId uuid.UUID, doc *model.Document, kb *model.KnowledgeBase, text string, i int, j int, k int, meta map[string]any) *schema.Document {
 
 	data := map[string]interface{}{
@@ -796,6 +877,7 @@ func (s *service) buildChildSchemaDoc(parentId uuid.UUID, doc *model.Document, k
 	}
 }
 
+// saveToStores 先保存 PostgreSQL 父分片，再将可召回的子分片嵌入并写入向量存储。
 func (s *service) saveToStores(ctx context.Context, kb *model.KnowledgeBase, parentModels []*model.DocumentChunk, docs []*schema.Document) error {
 	//父分段直接存入数据库pg
 	err := s.repo.createDocumentChunks(ctx, parentModels)
@@ -820,6 +902,7 @@ func (s *service) saveToStores(ctx context.Context, kb *model.KnowledgeBase, par
 	return nil
 }
 
+// processDocx 将 DOCX 解析器输出的章节转换为父/子两层分片。
 func (s *service) processDocx(sections []*schema.Document, doc *model.Document, parentModels []*model.DocumentChunk, kb *model.KnowledgeBase, childSchemaDocs []*schema.Document) ([]*model.DocumentChunk, []*schema.Document) {
 	for _, sec := range sections {
 		//main header footers tables
@@ -857,6 +940,7 @@ func (s *service) processDocx(sections []*schema.Document, doc *model.Document, 
 	return parentModels, childSchemaDocs
 }
 
+// mapSectionToChinese 将解析器章节类型转为便于前端和模型理解的中文标签。
 func (s *service) mapSectionToChinese(sectionType string) string {
 	switch sectionType {
 	case "main":
@@ -872,6 +956,7 @@ func (s *service) mapSectionToChinese(sectionType string) string {
 	}
 }
 
+// processPDF 清洗 PDF 文本并以页面/语义块为基础构建父/子分片。
 func (s *service) processPDF(pages []*schema.Document, doc *model.Document, parentModels []*model.DocumentChunk, kb *model.KnowledgeBase, childSchemaDocs []*schema.Document) ([]*model.DocumentChunk, []*schema.Document) {
 	if len(pages) == 0 {
 		return parentModels, childSchemaDocs
@@ -908,6 +993,7 @@ func (s *service) processPDF(pages []*schema.Document, doc *model.Document, pare
 	return parentModels, childSchemaDocs
 }
 
+// cleanPDFText 清理 PDF 提取文本中的空白、页眉页脚和无意义短块，输出候选语义块。
 func (s *service) cleanPDFText(content string) []string {
 	content = strings.ReplaceAll(content, "\r\n", "\n")
 	content = strings.ReplaceAll(content, "\t", "")
@@ -957,6 +1043,7 @@ func (s *service) cleanPDFText(content string) []string {
 	return deduplicateParents(parents)
 }
 
+// processHtml 去除网页结构噪声后按正文块拆分，并生成可检索的子分片。
 func (s *service) processHtml(docs []*schema.Document, doc *model.Document, parentModels []*model.DocumentChunk, kb *model.KnowledgeBase, childSchemaDocs []*schema.Document) ([]*model.DocumentChunk, []*schema.Document) {
 	if len(docs) == 0 {
 		return parentModels, childSchemaDocs
@@ -1121,6 +1208,7 @@ func (s *service) processHtml(docs []*schema.Document, doc *model.Document, pare
 	return parentModels, childSchemaDocs
 }
 
+// processEpub 按 EPUB 章节构建父分片，并在章节内滑窗生成用于召回的子分片。
 func (s *service) processEpub(chapters []*schema.Document, doc *model.Document, parentModels []*model.DocumentChunk, kb *model.KnowledgeBase, childSchemaDocs []*schema.Document) ([]*model.DocumentChunk, []*schema.Document) {
 	if len(chapters) == 0 {
 		return parentModels, childSchemaDocs
@@ -1173,6 +1261,7 @@ func (s *service) processEpub(chapters []*schema.Document, doc *model.Document, 
 	return parentModels, childSchemaDocs
 }
 
+// QueryIntent 是由聊天模型抽取的检索意图，提供关键词及可选的章节、卷号过滤条件。
 type QueryIntent struct {
 	Keywords   string `json:"keywords"`
 	VolumeNum  int    `json:"volume_num"`  //卷号 0 表示未指定
@@ -1180,8 +1269,11 @@ type QueryIntent struct {
 	DocName    string `json:"doc_name"`
 }
 
+// parseQueryIntent 内部服务层方法：利用大模型（LLM）对用户的提问进行意图解析，结构化提取出关键词、卷号和章节号
+// parseQueryIntent 调用知识库绑定的聊天模型，把自然语言问题转换为关键词和元数据过滤条件。
 func (s *service) parseQueryIntent(ctx context.Context, kb *model.KnowledgeBase, query string) (*QueryIntent, error) {
-	//构建提示词
+	// 1. 构建 System Prompt 指导大模型进行结构化数据提取
+	// 严格限制返回格式为 JSON，并包含清晰的转换规则（如中文数字转阿拉伯数字）与 Few-Shot 示例
 	prompt := `你是一个结构化数据提取助手。请从用户的提问中提取查询关键词、卷号和章节号。
 规则：
 1. volume_num: 提取"卷"的信息（如：第四卷、卷4）。若未提取到则返回 0。
@@ -1196,19 +1288,23 @@ func (s *service) parseQueryIntent(ctx context.Context, kb *model.KnowledgeBase,
 
 问题："斗罗大陆第10章唐三的魂环"
 输出：{"keywords": "唐三的魂环", "volume_num": 0, "chapter_num": 10}`
-	//调用知识库关联的对话模型 进行解析
+
+	// 2. 根据知识库绑定的配置，获取对应的大模型（LLM）对话客户端实例
 	chatModel, err := s.getChatModel(kb.ChatModelName, kb.ChatModelProvider)
 	if err != nil {
 		logs.Errorf("getChatModel 获取对话模型失败: %v", err)
 		return nil, err
 	}
+
+	// 3. 组装消息历史并调用大模型进行文本生成
+	// 包含 System 设定和 User 实际输入
 	message, err := chatModel.Generate(ctx, []*schema.Message{
 		{
-			Role:    schema.System,
+			Role:    schema.System, // 系统提示词
 			Content: prompt,
 		},
 		{
-			Role:    schema.User,
+			Role:    schema.User, // 用户提示词
 			Content: query,
 		},
 	})
@@ -1216,25 +1312,35 @@ func (s *service) parseQueryIntent(ctx context.Context, kb *model.KnowledgeBase,
 		logs.Errorf("generate 模型生成失败: %v", err)
 		return nil, err
 	}
-	//我们对返回的内容做一些特殊处理，防止返回的内容有md的代码块标签
+
+	// 4. 对大模型返回的文本进行清洗
+	// 防御性编程：很多大模型即使被要求只返回 JSON，仍会顽固地包裹 Markdown 代码块标签（如 ```json ... ```）
+	// 通过前后缀裁剪，剥离标签，确保拿到的是纯净的 JSON 字符串
 	rawJSON := message.Content
 	rawJSON = strings.TrimPrefix(rawJSON, "```json")
 	rawJSON = strings.TrimPrefix(rawJSON, "```")
 	rawJSON = strings.TrimSuffix(rawJSON, "```")
 	rawJSON = strings.TrimSpace(rawJSON)
+
+	// 5. 将清洗后的 JSON 反序列化进结构体中
 	var intent QueryIntent
 	if err := json.Unmarshal([]byte(rawJSON), &intent); err != nil {
 		logs.Errorf("json.Unmarshal 解析失败: %v", err)
-		//兜底 降级处理 返回默认
+		// 【容错/优雅降级】：如果大模型由于幻觉返回了错乱格式导致反序列化失败，
+		// 系统不报错崩溃，而是兜底将用户的完整提问原样作为关键词，卷/章设为0，确保后续的检索主流程仍能运行
 		return &QueryIntent{Keywords: query, VolumeNum: 0, ChapterNum: 0}, nil
 	}
-	//如果关键词为空 返回原有的内容
+
+	// 6. 再次容错：如果大模型提取出的核心关键词为空（比如过滤得太干净了），则将原提问赋值给它以防后续无法做向量检索
 	if intent.Keywords == "" {
 		intent.Keywords = query
 	}
+
+	// 7. 成功返回解析出的结构化查询意图
 	return &intent, nil
 }
 
+// getChatModel 根据提供商类型构造用于查询意图分析的聊天模型客户端。
 func (s *service) getChatModel(modelName string, modelProvider string) (aiModel.ToolCallingChatModel, error) {
 	ctx := context.Background()
 	var chatModel aiModel.ToolCallingChatModel
@@ -1269,6 +1375,7 @@ func (s *service) getChatModel(modelName string, modelProvider string) (aiModel.
 	return chatModel, err
 }
 
+// getProviderConfig 通过内部事件读取模型提供商配置，避免知识库模块直接依赖 LLM 仓储实现。
 func (s *service) getProviderConfig(ctx context.Context, llmType model.LLMType, provider string, name string) (*model.ProviderConfig, error) {
 	trigger, err := event.Trigger("getProviderConfig", &shared.GetProviderConfigsRequest{
 		Provider:  provider,
@@ -1283,6 +1390,7 @@ func (s *service) getProviderConfig(ctx context.Context, llmType model.LLMType, 
 	return result, nil
 }
 
+// deleteMilvusIndex 删除指定文档在知识库对应 Milvus 集合中的全部向量。
 func (s *service) deleteMilvusIndex(ctx context.Context, kbId uuid.UUID, docId uuid.UUID) error {
 	index := s.buildIndex(kbId)
 	expr := fmt.Sprintf("doc_id=='%s'", docId.String())
@@ -1297,6 +1405,7 @@ func (s *service) deleteMilvusIndex(ctx context.Context, kbId uuid.UUID, docId u
 	return nil
 }
 
+// deduplicateParents 保持原始顺序去重父分片 ID，避免一次召回重复回填同一段内容。
 func deduplicateParents(parents []string) []string {
 	seen := make(map[string]struct{})
 	var result []string
@@ -1314,10 +1423,12 @@ func deduplicateParents(parents []string) []string {
 	return result
 }
 
+// lookLikeSentenceEnd 判断文本块末尾是否像一句完整自然语言，用于优化切分边界。
 func lookLikeSentenceEnd(block string) bool {
 	return regexp.MustCompile(`[。！？.!?]$`).MatchString(block)
 }
 
+// looksLikeCode 粗略识别代码块，避免按普通自然语言规则错误切断代码。
 func looksLikeCode(block string) bool {
 	return strings.Contains(block, "package ") ||
 		strings.Contains(block, "func ") ||
@@ -1333,6 +1444,8 @@ func looksLikeCode(block string) bool {
 		strings.Contains(block, "{ ") ||
 		strings.Contains(block, "}")
 }
+
+// newService 初始化仓储与外部检索客户端；客户端初始化失败时会记录日志并以 nil 客户端继续返回。
 func newService() *service {
 	conf := config.GetConfig()
 
@@ -1386,6 +1499,7 @@ func newService() *service {
 	}
 }
 
+// Close 关闭 Milvus 等需要显式释放的外部资源。
 func (s *service) Close() error {
 	if s.milvusClient != nil {
 		return s.milvusClient.Close()

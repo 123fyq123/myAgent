@@ -63,7 +63,8 @@ func registerTools() {
 		logs.Error("init k8s client error", "error", err)
 	}
 	tools.RegisterSystemTools(
-		tools.NewWeatherTool(&tools.WeatherConfig{ApiKey: tools.ApiKey}),
+		// 天气工具依赖高德地图 API Key；未配置时不注册，保证基础 API 可启动。
+		// tools.NewWeatherTool(&tools.WeatherConfig{ApiKey: tools.ApiKey}),
 		tools.NewGitTool(), tools.NewGitCommitTool(),
 		tools.NewK8sResourceQueryTool(),
 		tools.NewK8sLogsTool(),
