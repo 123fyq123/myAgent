@@ -22,11 +22,13 @@ func (t *TextCombineNode) Invoke(ctx context.Context, input map[string]any) (map
 	//这里输入的数据有两个获取途径，一个是通过data字段，一个是通过input字段
 	//data字段是节点的配置数据，input字段是节点的输入数据
 	var templateStr string
-	_, ok := input["template"]
-	if !ok {
-		templateStr = t.data["template"].(map[string]any)["fieldValue"].(string)
-	} else {
-		templateStr = input["template"].(string)
+	if value, ok := input["template"]; ok {
+		templateStr = fieldValueToString(value)
+	} else if value, ok := t.data["template"]; ok {
+		templateStr = fieldValueToString(value)
+	}
+	if templateStr == "" {
+		return nil, fmt.Errorf("textCombine template is empty")
 	}
 	//变量
 	variablesMap := make(map[string]any)
@@ -40,10 +42,22 @@ func (t *TextCombineNode) Invoke(ctx context.Context, input map[string]any) (map
 		}
 	}
 	if !hasVariables {
-		arr := t.data["variables"].([]any)
-		for _, v := range arr {
-			m := v.(map[string]any)
-			variablesMap[m["fieldName"].(string)] = m["fieldValue"]
+		if rawVariables, ok := t.data["variables"]; ok {
+			switch arr := rawVariables.(type) {
+			case []any:
+				for _, v := range arr {
+					if m, ok := v.(map[string]any); ok {
+						fieldName := fieldValueToString(m["fieldName"])
+						if fieldName != "" {
+							variablesMap[fieldName] = m["fieldValue"]
+						}
+					}
+				}
+			case map[string]any:
+				for k, v := range arr {
+					variablesMap[k] = fieldValueToString(v)
+				}
+			}
 		}
 	}
 	//渲染模版
@@ -63,4 +77,20 @@ func (t *TextCombineNode) Invoke(ctx context.Context, input map[string]any) (map
 		result[k] = v
 	}
 	return result, nil
+}
+
+func fieldValueToString(value any) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case fmt.Stringer:
+		return v.String()
+	case map[string]any:
+		if fieldValue, ok := v["fieldValue"]; ok {
+			return fieldValueToString(fieldValue)
+		}
+	case nil:
+		return ""
+	}
+	return fmt.Sprintf("%v", value)
 }

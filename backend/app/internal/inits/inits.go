@@ -16,6 +16,7 @@ func Init(s *server.Server, conf *config.Config) {
 	//初始化数据库
 	database.InitPostgres(conf.DB.Postgres)
 	logs.Infof("数据库初始化完成")
+	ensurePostgresSchema()
 	//初始化redis
 	database.InitRedis(conf.DB.Redis)
 	logs.Infof("redis初始化完成")
@@ -41,6 +42,7 @@ func Init(s *server.Server, conf *config.Config) {
 		&router.WorkflowRouter{},
 		&router.NodeRouter{},
 		&router.SkillRouter{},
+		&router.CompatRouter{},
 	)
 	// 注册事件处理器
 	eventRouter := &router.Event{}

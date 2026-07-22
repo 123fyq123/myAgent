@@ -2,6 +2,7 @@ package router
 
 import (
 	"mcp-server/internal/tool"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -21,8 +22,10 @@ func (u *McpRouter) Register(engine *gin.Engine) {
 		server.WithResourceCapabilities(true, true),
 		server.WithPromptCapabilities(true),
 	)
-	weather := tool.NewWeatherTool(tool.GdApiKey)
-	mcpServer.AddTool(weather.Build(), weather.Invoke)
+	if apiKey := os.Getenv("AMAP_API_KEY"); apiKey != "" {
+		weather := tool.NewWeatherTool(apiKey)
+		mcpServer.AddTool(weather.Build(), weather.Invoke)
+	}
 	sseServer := server.NewSSEServer(
 		mcpServer,
 		server.WithBaseURL("http://localhost:7777"),

@@ -312,7 +312,7 @@ func (s *service) buildMainAgent(ctx context.Context, agent *model.Agent, histor
 	//首先需要获取到agent的模型配置信息
 	providerConfig, err := s.getProviderConfig(ctx, model.LLMTypeChat, agent.ModelProvider, agent.ModelName)
 	if err != nil {
-		return nil, errs.DBError
+		return nil, err
 	}
 	if providerConfig == nil {
 		return nil, biz.ErrProviderConfigNotFound
@@ -385,6 +385,9 @@ func (s *service) buildMainAgent(ctx context.Context, agent *model.Agent, histor
 }
 
 func (s *service) getProviderConfig(ctx context.Context, chat model.LLMType, provider string, name string) (*model.ProviderConfig, error) {
+	if provider == "" || name == "" {
+		return nil, biz.ErrProviderConfigNotFound
+	}
 	//这个需要调用llms服务 所以我们需要定义event事件
 	trigger, err := event.Trigger("getProviderConfig", &shared.GetProviderConfigsRequest{
 		Provider:  provider,
@@ -395,7 +398,11 @@ func (s *service) getProviderConfig(ctx context.Context, chat model.LLMType, pro
 		logs.Errorf("触发getProviderConfig事件失败: %v", err)
 		return nil, errs.DBError
 	}
-	return trigger.(*model.ProviderConfig), nil
+	providerConfig, ok := trigger.(*model.ProviderConfig)
+	if !ok || providerConfig == nil {
+		return nil, biz.ErrProviderConfigNotFound
+	}
+	return providerConfig, nil
 }
 
 func (s *service) buildToolCallingChatModel(ctx context.Context, agent *model.Agent, config *model.ProviderConfig) (aiModel.ToolCallingChatModel, error) {

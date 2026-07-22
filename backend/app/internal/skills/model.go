@@ -118,8 +118,21 @@ func (m *models) findByName(ctx context.Context, name string) (*model.Skill, err
 	return &skill, err
 }
 
+func (m *models) findByNameUnscoped(ctx context.Context, name string) (*model.Skill, error) {
+	var skill model.Skill
+	err := m.db.WithContext(ctx).Unscoped().Where("name = ?", name).First(&skill).Error
+	if gorms.IsRecordNotFoundError(err) {
+		return nil, nil
+	}
+	return &skill, err
+}
+
 func (m *models) create(ctx context.Context, skill *model.Skill) error {
 	return m.db.WithContext(ctx).Create(skill).Error
+}
+
+func (m *models) saveUnscoped(ctx context.Context, skill *model.Skill) error {
+	return m.db.WithContext(ctx).Unscoped().Save(skill).Error
 }
 
 func newModels(db *gorm.DB) *models {

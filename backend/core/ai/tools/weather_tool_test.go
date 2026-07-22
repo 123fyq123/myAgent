@@ -6,19 +6,32 @@ import (
 	"testing"
 )
 
-func TestNewWeatherTool(t *testing.T) {
+func TestWeatherToolInfoAndParams(t *testing.T) {
 	weatherTool := NewWeatherTool(&WeatherConfig{
-		ApiKey: ApiKey,
+		ApiKey: "test-key",
+	})
+	info, err := weatherTool.Info(context.Background())
+	if err != nil {
+		t.Fatalf("Info() error = %v", err)
+	}
+	if info.Name != "get_weather" {
+		t.Fatalf("Info().Name = %q, want get_weather", info.Name)
+	}
+	if len(weatherTool.Params()) == 0 {
+		t.Fatalf("Params() should not be empty")
+	}
+}
+
+func TestWeatherToolRequiresCity(t *testing.T) {
+	weatherTool := NewWeatherTool(&WeatherConfig{
+		ApiKey: "test-key",
 	})
 	params := map[string]string{
-		"city":       "北京",
 		"extensions": "all",
 	}
 	marshal, _ := json.Marshal(params)
-	invokableRun, err := weatherTool.InvokableRun(context.Background(), string(marshal))
-	if err != nil {
-		t.Errorf("InvokableRun() error = %v", err)
+	_, err := weatherTool.InvokableRun(context.Background(), string(marshal))
+	if err == nil {
+		t.Fatal("InvokableRun() should require city")
 	}
-	t.Logf("InvokableRun() = %v", invokableRun)
-
 }

@@ -40,6 +40,25 @@ func (s *service) createSkill(ctx context.Context, userId uuid.UUID, req CreateS
 	if skill != nil {
 		return nil, biz.ErrSkillAlreadyExisted
 	}
+	deletedSkill, err := s.repo.findByNameUnscoped(ctx, skillInfo.Name)
+	if err != nil {
+		logs.Errorf("查询已删除技能失败: %v", err)
+		return nil, err
+	}
+	if deletedSkill != nil && deletedSkill.DeletedAt.Valid {
+		deletedSkill.DeletedAt.Valid = false
+		deletedSkill.DeletedAt.Time = time.Time{}
+		deletedSkill.Description = skillInfo.Description
+		deletedSkill.BaseDir = req.BaseDir
+		deletedSkill.Status = model.SkillStatusActive
+		deletedSkill.CreatorID = userId
+		deletedSkill.SourceId = "local"
+		if err := s.repo.saveUnscoped(ctx, deletedSkill); err != nil {
+			logs.Errorf("恢复已删除技能失败: %v", err)
+			return nil, err
+		}
+		return toSkillResponse(deletedSkill), nil
+	}
 	//创建技能
 	skill = &model.Skill{
 		BaseModel: model.BaseModel{

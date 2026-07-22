@@ -529,6 +529,9 @@ func (s *service) createTempFileFromUploadFile(src multipart.File, fileName stri
 // getEmbeddingConfig 内部服务层方法：根据厂商、模型名称和用户ID，动态加载并初始化对应的向量化（Embedding）客户端实例
 // getEmbeddingConfig 根据知识库绑定的提供商和模型名创建嵌入器，用于入库和检索时保持同一向量空间。
 func (s *service) getEmbeddingConfig(provider string, embeddingModelName string, creatorID uuid.UUID) (embedding.Embedder, error) {
+	if provider == "" || embeddingModelName == "" {
+		return nil, biz.ErrEmbeddingConfigNotFound
+	}
 
 	// 1. 触发内置事件总线（Event Bus）或插件系统
 	// 核心考量：模型配置信息（API Key, Base URL 等）可能由其他微服务、模块或专门的模型管理模块维护。
@@ -544,7 +547,10 @@ func (s *service) getEmbeddingConfig(provider string, embeddingModelName string,
 	}
 
 	// 2. 将事件触发返回的结果（interface{} 类型）断言转换为预期的结构体指针
-	response := trigger.(*shared.EmbeddingConfigResponse)
+	response, ok := trigger.(*shared.EmbeddingConfigResponse)
+	if !ok || response == nil || response.Model == nil {
+		return nil, biz.ErrEmbeddingConfigNotFound
+	}
 
 	// 3. 使用大模型框架（这里使用的是 einos 框架）动态加载并驱动 Embedding 实例
 	// 传入厂商标识和拼装好的模型配置（ToEmbeddingConfig 包含了最终的 APIKey、Endpoint 等秘密信息）

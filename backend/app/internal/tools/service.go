@@ -148,6 +148,16 @@ func (s *service) testTool(ctx context.Context, userId uuid.UUID, id uuid.UUID, 
 		logs.Errorf("get tool error: %v", err)
 		return nil, errs.DBError
 	}
+	if toolInfo == nil {
+		return nil, biz.ErrToolNotExisted
+	}
+	if toolInfo.ToolType == model.McpToolType {
+		return &TestToolResponse{
+			Message: "MCP tool testing requires a reachable MCP service; use the MCP tools endpoint after configuring the service.",
+			Success: false,
+			Data:    nil,
+		}, nil
+	}
 	//查找系统中注册的tool
 	invokeParamTool := tools.FindTool(toolInfo.Name)
 	if invokeParamTool == nil {

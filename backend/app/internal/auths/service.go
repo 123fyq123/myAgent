@@ -61,12 +61,15 @@ func (s *service) register(req RegisterReq) (*RegisterResp, error) {
 	}
 	token := hex.EncodeToString(tokenBytes)
 	userId := uuid.New()
-	//存入redis 中，用于激活邮件的时候验证
-	tokenKey := fmt.Sprintf("verify_token:%s", token)
-	err = s.cache.Set(tokenKey, userId.String(), 24*60*60)
-	if err != nil {
-		logs.Errorf("register Set error: %v", err)
-		return nil, errs.DBError
+	emailEnabled := s.emailEnabled()
+	if emailEnabled {
+		//存入redis 中，用于激活邮件的时候验证
+		tokenKey := fmt.Sprintf("verify_token:%s", token)
+		err = s.cache.Set(tokenKey, userId.String(), 24*60*60)
+		if err != nil {
+			logs.Errorf("register Set error: %v", err)
+			return nil, errs.DBError
+		}
 	}
 	//存入数据库
 	user := model.User{
@@ -74,11 +77,14 @@ func (s *service) register(req RegisterReq) (*RegisterResp, error) {
 		Username:      req.Username,
 		Password:      string(password),
 		Email:         req.Email,
-		EmailVerified: false,
+		EmailVerified: !emailEnabled,
 		LastLoginTime: time.Now(),
 		CurrentPlan:   model.FreePlan,
 		Status:        model.UserStatusPending,
 		Avatar:        "default",
+	}
+	if !emailEnabled {
+		user.Status = model.UserStatusNormal
 	}
 	err = s.repo.transaction(ctx, func(tx *gorm.DB) error {
 		//创建用户
@@ -87,20 +93,32 @@ func (s *service) register(req RegisterReq) (*RegisterResp, error) {
 			logs.Errorf("register saveUser error: %v", err)
 			return err
 		}
-		//发送邮件
-		err = s.sendVerifyEmail(user.Email, user.Username, token)
-		if err != nil {
-			logs.Errorf("register sendVerifyEmail error: %v", err)
-			return err
+		if emailEnabled {
+			//发送邮件
+			err = s.sendVerifyEmail(user.Email, user.Username, token)
+			if err != nil {
+				logs.Errorf("register sendVerifyEmail error: %v", err)
+				return err
+			}
 		}
 		return nil
 	})
 	if err != nil {
 		return nil, errs.DBError
 	}
+	if !emailEnabled {
+		return &RegisterResp{
+			Message: "注册成功，当前未配置邮箱服务，已自动跳过邮箱验证",
+		}, nil
+	}
 	return &RegisterResp{
 		Message: "注册成功，请前往邮箱进行验证",
 	}, nil
+}
+
+func (s *service) emailEnabled() bool {
+	emailConfig := config.GetConfig().Email
+	return emailConfig.GetHost() != "" && emailConfig.GetUsername() != "" && emailConfig.GetPassword() != "" && emailConfig.GetFrom() != ""
 }
 
 func (s *service) sendVerifyEmail(email string, username string, token string) error {
@@ -247,6 +265,9 @@ func (s *service) refreshToken(refreshToken string) (*LoginResp, error) {
 }
 
 func (s *service) forgotPassword(forgetReq ForgetPasswordReq) (any, error) {
+	if !s.emailEnabled() {
+		return nil, biz.ErrEmailNotConfigured
+	}
 	//先检查邮件是否存在
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()

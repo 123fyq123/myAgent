@@ -10,7 +10,9 @@ import (
 
 type repository interface {
 	findByName(ctx context.Context, name string) (*model.Skill, error)
+	findByNameUnscoped(ctx context.Context, name string) (*model.Skill, error)
 	create(ctx context.Context, skill *model.Skill) error
+	saveUnscoped(ctx context.Context, skill *model.Skill) error
 	list(ctx context.Context, userId uuid.UUID, filter SkillFilter) ([]*model.Skill, int64, error)
 	listAll(ctx context.Context, userId uuid.UUID) ([]*model.Skill, error)
 	getSkill(ctx context.Context, id uuid.UUID) (*model.Skill, error)

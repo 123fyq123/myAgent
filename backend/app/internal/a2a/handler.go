@@ -18,6 +18,7 @@ func (h *Handler) GetAgentCard(c *gin.Context) {
 	}
 	resp, err := h.service.getAgentCard(r)
 	if err != nil {
+		res.Error(c, err)
 		return
 	}
 	res.Success(c, resp)
@@ -30,6 +31,7 @@ func (h *Handler) SaveAgentCard(c *gin.Context) {
 	}
 	resp, err := h.service.saveAgentCard(r)
 	if err != nil {
+		res.Error(c, err)
 		return
 	}
 	res.Success(c, resp)
